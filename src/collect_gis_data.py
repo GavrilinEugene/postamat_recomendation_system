@@ -17,19 +17,27 @@ DATA_PATH = BASE_PATH / 'data'
 
 
 class GisDataLoader:
+    """
+        Объект по выгрузке кампаний и зданий из gis
+    """
 
     def __init__(self, city, key, cache_date=datetime.today().strftime('%Y%m%d')):
         self.city = city
         self.key = key
         self.date = cache_date
-        self.companies_data = self.__load_cache(
+        self.companies_data = gt.load_pickle(
             f"{DATA_PATH}/{self.city}_{self.date}")
-        print('companies:', len(self.companies_data))
-        self.buildings_data = self.__load_cache(f"{DATA_PATH}/{self.city}_buildings")
-        print('buildings:', len(self.buildings_data))
+        if self.companies_data is None:
+            self.companies_data = {}
+        self.buildings_data = gt.load_pickle(f"{DATA_PATH}/{self.city}_buildings")
+        if self.buildings_data is None:
+            self.buildings_data = {}        
         
         
-    def get_city_id(self):
+    def get_city_id(self) -> dict:
+        """
+            Получение идентификатора города
+        """
         try:
             r = requests.get(f"https://catalog.api.2gis.com/2.0/region/search?q={self.city}&key={self.key}")
             j_dict = json.loads(r.text)
@@ -37,7 +45,10 @@ class GisDataLoader:
         except Exception as e:
             return None
 
-    def get_rubric_list(self):
+    def get_rubric_list(self) -> dict:
+        """
+            Получение массива рубрик на город
+        """
         try:
             id_ = self.get_city_id()
             if id_ is None:
@@ -55,18 +66,15 @@ class GisDataLoader:
                     rubric_list.append((rubric['name'], rubric[cnt]))
             df_rubrics = pd.DataFrame(rubric_list, columns = ['rubric', 'cnt']).sort_values(by = 'cnt', ascending=False)
             d_rubric_cnt = dict(zip(df_rubrics['rubric'], df_rubrics['cnt']))
-        except:
+        except Exception as e:
+            print(str(e))
             return None                
         return d_rubric_cnt        
 
-    def __load_cache(self, path):
-        data = gt.load_pickle(path)
-        if data is None:
-            return dict()
-        else:
-            return data
-
     def __run_request(self, gis_request):
+        """
+            Получение данных по api запросу
+        """
         r = requests.get(gis_request)
         if r.ok == True:
             soup = BeautifulSoup(r.text, "lxml")
@@ -83,12 +91,20 @@ class GisDataLoader:
                 print(str(e))
         return None, -1, -1
 
-    def __load_rubric(self, rubric, url_properties):
+    def __get_rubric_totals(self, rubric):
+        gis_request = f"""https://catalog.api.2gis.com/3.0/items?q={self.city} {rubric}&page=1&page_size=2&key={self.key}"""
+        _, _, totals = self.__run_request(gis_request)
+        return totals        
+
+    def __load_rubric(self, rubric, url_properties, totals):
+        """
+            Выгрузка одной кампании
+        """
         companies = []
-        for page in range(1, 250):
-            gis_request = f"""https://catalog.api.2gis.com/3.0/items?q={self.city} {rubric}&page={page}&page_size=50&key={self.key}"""+url_properties
+        for page in range(1, totals//50+1):
+            gis_request = f"""https://catalog.api.2gis.com/3.0/items?q={self.city} {rubric}&page={page}&page_size=50&key={self.key}{url_properties}"""
             
-            data, status = self.__run_request(gis_request)
+            data, status, _ = self.__run_request(gis_request)
             if status == -1:
                 return gt.return_with_check(companies)
             else:
@@ -96,11 +112,18 @@ class GisDataLoader:
         return gt.return_with_check(companies)
 
     def __load_building_info(self, building_id):
+        """
+            Выгрузка данных о здании
+        """
         gis_request = f"""https://catalog.api.2gis.com/3.0/items/byid?id={building_id}&fields=items.geometry.hover,items.geometry.centroid,items.structure_info.year_of_construction,items.structure_info.material&key={self.key}"""
-        data, _ = self.__run_request(gis_request)
+        data, _, _ = self.__run_request(gis_request)
         return data
 
     def __collect(self, url_properties, dict_cache, save_path):
+
+        """
+            Выгрузка данных о здании
+        """
 
         city_rubrics = self.get_rubric_list()
         for rubric in tqdm(city_rubrics.keys()):
@@ -121,11 +144,12 @@ class GisDataLoader:
                 df['city'] = self.city
                 df['id'] = df['id'].apply(lambda x: x.split('_')[0])
                 
-                df = df[~df['point_lat'].isna()]
-                df = df[['rubric', 'name', 'id',
-                     'address_building_id',
-                     'rubrics_0_name', 'point_lat', 'point_lon']]
+                df = df[(~df['point_lat'].isna())]                         
+                df = df[['city', 'rubric', 'name', 'id',
+                     'address_building_id', 'address_name',
+                     'address_components_0_street_id', 'point_lat', 'point_lon']]
                 if df.empty == False:
+                    print(rubric, totals, len(df), orig_shape / totals > 0.95)
                     dict_cache[rubric] = (df, int(orig_shape / totals > 0.95))
             except Exception as e:
                 print(str(e))
@@ -137,22 +161,14 @@ class GisDataLoader:
         return dict_cache
     
 
-    def collect_companies(self, rubrics: list):
+    def collect_companies(self):
         
-        city_rubrics = self.get_rubric_list()
-        if city_rubrics is None:
-            intersect_rubrics = rubrics
-        else:
-            intersect_rubrics = set(rubrics).intersection(city_rubrics)
-
         url_properties = "&type=branch&fields=items.point,items.adm_div,items.address,items.rubrics"
-        path_1 =  self.city + '_' + self.date
-        path = str(DATA_PATH / path_1)
-        self.companies_data = self.__collect(intersect_rubrics, url_properties,
-                                             self.companies_data, path, mode= 'companies')
+        self.companies_data = self.__collect(url_properties,
+                                             self.companies_data, DATA_PATH/f"{self.city}_{self.date}")
         
         if len(self.companies_data) > 0:
-            data = pd.concat(self.companies_data.values())
+            data = pd.concat([self.companies_data[x][0] for x in self.companies_data.keys()])
             return data
         else:
             return None
@@ -162,7 +178,7 @@ class GisDataLoader:
             print("collecting companies first...")
             companies = self.collect_companies()
         else:
-            companies = pd.concat(self.companies_data.values())
+            companies = pd.concat([self.companies_data[x][0] for x in self.companies_data.keys()])
 
         buildings_ids = companies['address_building_id'].unique()
         print(f"collecting buildings ({len(buildings_ids)})")
@@ -184,9 +200,8 @@ class GisDataLoader:
         return pd.concat(self.buildings_data.values())
 
 
-dataloader = GisDataLoader('Москва', key, cache_date='20221001')
-all_rubrics = dataloader.get_rubric_list()
-companies = dataloader.collect_companies(all_rubrics)
+dataloader = GisDataLoader('Москва', key, cache_date='20221010')
+companies = dataloader.collect_companies()
 buildings = dataloader.collect_buildings()
 
 companies[f'geo_h3_{RES}'] = gt.make_h3_index(companies, 'point_lat', 'point_lon', RES)

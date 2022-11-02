@@ -19,6 +19,9 @@ DATA_PATH = BASE_PATH / 'data'
 
 
 def upload_isochrones():
+    """
+        Выгрузка изохрон
+    """
     df_isochrones = pd.read_csv(DATA_PATH / "isochrones_walking.csv", sep = ';')
     df_isochrones = df_isochrones[df_isochrones['kind'] != 'walking_20min']
     df_isochrones['geometry'] = df_isochrones['geometry'].apply(wkt.loads)
@@ -27,6 +30,9 @@ def upload_isochrones():
 
 
 def upload_domain():
+    """
+        Выгрузка сетки хексагон Москвы
+    """    
     df_domain = pd.read_csv(DATA_PATH / "moscow_domain.csv", sep = ';')
     df_domain = df_domain[df_domain['okrug_name']!= 'Зеленоградский административный округ']
     df_domain['geometry'] = df_domain['geometry'].apply(wkt.loads)
@@ -45,6 +51,9 @@ def upload_h3_dict():
 
 
 def upload_rubrics():
+    """
+        Выгрузка популярных объектов: магазины, банки, кафе и так далее
+    """
     df_copmanies = pd.read_csv(DATA_PATH / "popular_rubrics.csv", sep = ';')
     df_copmanies['geometry'] = gpd.points_from_xy(df_copmanies['point_lon'], df_copmanies['point_lat'])
     gdf_companies = gpd.GeoDataFrame(df_copmanies, geometry = 'geometry', crs = 'epsg:4326')
@@ -52,7 +61,9 @@ def upload_rubrics():
 
 
 def upload_features():
-
+    """
+        Выгрузка фичей хексагона|тип изохроны|суммы по инфраструктурным объектам
+    """
     df_population = pd.read_csv(DATA_PATH / "population.csv", sep = ';')
     df_population.rename(columns = {f'geo_h3_{RES}': 'h3_polyfill'}, inplace=True)
 

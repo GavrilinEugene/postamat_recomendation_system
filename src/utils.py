@@ -1,8 +1,6 @@
 import pickle
 import pandas as pd
 import numpy as np
-import geojson
-import json
 from h3 import h3
 
 
@@ -43,7 +41,6 @@ def save_pickle(obj, filepath):
     with open(filepath, 'wb') as handle:
         pickle.dump(obj, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 
-
 
 
 def make_h3_index(df: pd.DataFrame, lat: str, lon: str, resolution: int):

@@ -2,12 +2,11 @@ import requests
 from pathlib import Path
 import os
 import geopandas as gpd
-import glob
 from tqdm import tqdm
 import pandas as pd
 import h3pandas
 import geojson
-from shapely.geometry import Polygon, Point, LineString
+from shapely.geometry import Polygon
 from enums import token, RES
 
 import utils as gt
@@ -18,7 +17,7 @@ DATA_PATH = BASE_PATH / 'data'
 
 
 
-def get_isochrone(coord, kind='driving', minutes='5,10,15,20'):
+def get_isochrone(coord, kind='walking', minutes='5,10,15,20'):
     """
 
     """
@@ -27,9 +26,11 @@ def get_isochrone(coord, kind='driving', minutes='5,10,15,20'):
     return geojson.loads(r.content)
 
 
-def collect_isochrones(df, kind):
+def collect_isochrones(df, kind='walking'):
     """
-    
+        Функция собирает изохроны по сетке h3, находящися в df Pandas.
+        :param df: pd.dataFframe - таблица с h3 индексами, на которые нужно собирать изохроны
+        :param kind: типы изохроны
     """
     cache_path = str(DATA_PATH / f"isochrones_walk_{kind}.pkl")
     print(cache_path)
@@ -58,7 +59,10 @@ def collect_isochrones(df, kind):
     df_iso.to_csv(DATA_PATH / "isochrones_walking.csv", sep = ';', index=None)
 
 
-def prepare_domin():
+def prepare_domin() -> gpd.GeoDataFrame:
+    """
+        Функция собирает сетку Москвы на h3 index = RES
+    """
     # собираем сетку данных, определяем центры квадратов
     df_msk_shape = gpd.read_file(DATA_PATH / "admzones2021" / "admzones2021.shp")
     df_msk_shape = df_msk_shape.drop(['okrug_id', 'area'], axis=1)
@@ -68,28 +72,11 @@ def prepare_domin():
     gdf_shape.rename(columns = {'h3_polyfill': f'geo_h3_{RES}'}, inplace=True)
     gdf_shape = gt.geo_lat_lon_from_h3(gdf_shape, f'geo_h3_{RES}')
     gdf_shape['point'] = gpd.points_from_xy(gdf_shape['lon'], gdf_shape['lat'])
-
-
-    # удаляем плохие локации - реки, парки, промышленные территории из области
-    path = str((DATA_PATH / "bad_polygons"/ "*.geojson").resolve())
-    files = glob.glob(path)
-    data_bad_files = []
-    for file in files:
-        table = gpd.read_file(file)
-        table = table[table['geometry'].apply(
-            lambda x: type(x) not in [Point, LineString])]
-        table = table.h3.polyfill_resample(RES).reset_index()
-        table.rename(columns={'h3_polyfill': f'geo_h3_{RES}'}, inplace=True)
-        data_bad_files.append(table)
-
-    df_bad = pd.concat(data_bad_files)
-    gdf_shape_filter = gdf_shape[~gdf_shape[f'geo_h3_{RES}'].isin(
-        df_bad[f'geo_h3_{RES}'])]
-    return gdf_shape_filter
-
+    gdf_shape.read_csv(DATA_PATH / "moscow_domain.csv", sep = ';')
+    return gdf_shape
 
 
 gdf_shape = prepare_domin()
-collect_isochrones(gdf_shape, 'walking')
+# collect_isochrones(gdf_shape, 'walking')
 
 

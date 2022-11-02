@@ -2,7 +2,7 @@
 token = 'pk.*******'
 
 # insert gis token (not free)
-key = ''
+key = 'demo'
 
 # h3 index resolution
 RES = 10
