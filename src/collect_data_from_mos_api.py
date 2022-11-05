@@ -10,8 +10,9 @@ from io import StringIO
 from shapely.geometry import Point
 import geopandas as gpd
 import numpy as np
-import argparse
-
+from enums import postgress_connection, postgress_db, lp, schema, RES,api_key
+engine = create_engine(f'postgresql://{lp}@{postgress_connection}/{postgress_db}')
+API_KEY = api_key
 
 def psql_insert_copy(table, conn, keys, data_iter):
     dbapi_conn = conn.connection
@@ -197,42 +198,32 @@ def get_dataframe_type4(API_KEY,dataset_id,purpose_name):
     df['address'] = df['address'].apply(split_type2)
 
     return df
-
-def run(args):
     
-    login = args.login
-    password = args.password
-    host = args.serv
-    port  = args.port
-    API_KEY = args.api_key
+df_sport = get_dataframe_type4(API_KEY=API_KEY,dataset_id = 629,purpose_name = 'спортивный объект')
+df_kiosk_papers = get_dataframe_type1(API_KEY=API_KEY,dataset_id = 2781,purpose_name = 'киоск печати')
+df_libr = get_dataframe_type2(API_KEY=API_KEY,dataset_id = 526,purpose_name = 'библиотека')
+df_dk = get_dataframe_type2(API_KEY=API_KEY,dataset_id = 493,purpose_name = 'дом культуры')
+df_mfc = get_dataframe_type3(API_KEY=API_KEY,dataset_id = 611,purpose_name = 'МФЦ')
     
-    engine = create_engine(f'postgresql://{login}:{password}@{host}:{port}/geo')
-    
-    df_sport = get_dataframe_type4(API_KEY=API_KEY,dataset_id = 629,purpose_name = 'спортивный объект')
-    df_kiosk_papers = get_dataframe_type1(API_KEY=API_KEY,dataset_id = 2781,purpose_name = 'киоск печати')
-    df_libr = get_dataframe_type2(API_KEY=API_KEY,dataset_id = 526,purpose_name = 'библиотека')
-    df_dk = get_dataframe_type2(API_KEY=API_KEY,dataset_id = 493,purpose_name = 'дом культуры')
-    df_mfc = get_dataframe_type3(API_KEY=API_KEY,dataset_id = 611,purpose_name = 'МФЦ')
-    
-    df_all = pd.concat([df_kiosk_papers,df_libr,df_dk,df_mfc,df_sport])
+df_all = pd.concat([df_kiosk_papers,df_libr,df_dk,df_mfc,df_sport])
 
 
-    good_objects = ['спортивный объект',\
+good_objects = ['спортивный объект',\
                 'библиотека','МФЦ','дом культуры','киоск печати']
 
-    df_all = df_all[df_all["purpose_name"].isin(good_objects)]
+df_all = df_all[df_all["purpose_name"].isin(good_objects)]
 
-    gdf_all = gpd.GeoDataFrame(df_all)
+gdf_all = gpd.GeoDataFrame(df_all)
 
-    gdf_all = gdf_all.set_crs(4326)
+gdf_all = gdf_all.set_crs(4326)
 
-    gdf_all.to_postgis(schema='postamat',name = 'obj_from_mos_api',\
+gdf_all.to_postgis(schema=schema,name = 'obj_from_mos_api',\
                      con = engine,if_exists = 'replace')
     
     
-    engine.execute("drop table if exists postamat.all_objects")
-    engine.execute("""
-    create table postamat.all_objects as
+engine.execute(f"drop table if exists {schema}.all_objects")
+engine.execute(f"""
+    create table {schema}.all_objects as
     select obj2.* from (
     select obj.*,ROW_NUMBER() OVER(PARTITION BY obj.id,obj.geometry order by obj.id)
     from (
@@ -249,7 +240,7 @@ def run(args):
             lat,
             lon,
             geo_h3_10 
-        from postamat.obj_from_mos_api
+        from {schema}.obj_from_mos_api
         union all
         (select  
             address_name,
@@ -264,36 +255,20 @@ def run(args):
             lat,
             lon,
             geo_h3_10 
-        from postamat.platform_buildings where purpose_name ='Жилой дом' or structure_info_apartments_count > 10 )	
+        from {schema}.platform_buildings where purpose_name ='Жилой дом' or structure_info_apartments_count > 10 )	
         ) obj
     where purpose_name in ('спортивный объект','Жилой дом','киоск печати','дом культуры','МФЦ','библиотека','Малоэтажный жилой дом')
     )obj2 
     where  row_number = 1;
 
-    update postamat.all_objects set address_name='' where address_name='[]';
-    update postamat.all_objects set purpose_name='жилой дом' where purpose_name in ('Жилой дом','Малоэтажный жилой дом');
+    update {schema}.all_objects set address_name='' where address_name='[]';
+    update {schema}.all_objects set purpose_name='жилой дом' where purpose_name in ('Жилой дом','Малоэтажный жилой дом');
     GRANT SELECT 
-    ON postamat.all_objects 
+    ON {schema}.all_objects 
     TO streamlit_app;
     """)
     
-    print(f"table with objects created")
-
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='desc')
-    parser.add_argument('-l', '--login', default='')
-    parser.add_argument('-p', '--password', default='')
-    parser.add_argument('-s', '--serv', default='')
-    parser.add_argument('-port', '--port', default='')
-    parser.add_argument('-api_key', '--api_key', default='')
-    args = parser.parse_args()
-    run(args)    
-
-
-
-
+print(f"table with objects created")
 
 
 

@@ -12,3 +12,7 @@ postgress_db = ''
 lp = ''
 schema = ''
 
+#insert data.mos.ru api-token
+
+api_key = ''
+
