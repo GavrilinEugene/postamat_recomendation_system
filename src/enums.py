@@ -50,3 +50,6 @@ bad_hex_with_postamat = ['8a11aa78c59ffff', '8a11aa783707fff', '8a11aa6a46e7fff'
        '8a11aa6a4a6ffff', '8a1181b6ec77fff', '8a11aa791c2ffff',
        '8a11aa4da8cffff', '8a11aa7adb47fff', '8a11aa6a344ffff',
        '8a11aa6853b7fff', '8a11aa788107fff']
+#insert data.mos.ru api-token
+
+api_key = ''

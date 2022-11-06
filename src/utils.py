@@ -2,6 +2,8 @@ import pickle
 import pandas as pd
 import numpy as np
 from h3 import h3
+import csv
+from io import StringIO
 
 
 def flatten_json(nested_json, exclude=['']):
@@ -85,3 +87,22 @@ def haversine_np(lat1, lon1, lat2, lon2):
     angle = np.sin(dlat / 2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0)**2
     km = 6371 * 2 * np.arcsin(np.sqrt(angle))
     return km
+
+def psql_insert_copy(table, conn, keys, data_iter):
+    # gets a DBAPI connection that can provide a cursor
+    dbapi_conn = conn.connection
+    with dbapi_conn.cursor() as cur:
+        s_buf = StringIO()
+        writer = csv.writer(s_buf)
+        writer.writerows(data_iter)
+        s_buf.seek(0)
+
+        columns = ', '.join('"{}"'.format(k) for k in keys)
+        if table.schema:
+            table_name = '{}.{}'.format(table.schema, table.name)
+        else:
+            table_name = table.name
+
+        sql = 'COPY {} ({}) FROM STDIN WITH CSV'.format(
+            table_name, columns)
+        cur.copy_expert(sql=sql, file=s_buf)
