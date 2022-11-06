@@ -11,26 +11,10 @@ from shapely.geometry import Point
 import geopandas as gpd
 import numpy as np
 from enums import postgress_connection, postgress_db, lp, schema, RES,api_key
+from utils import psql_insert_copy
 engine = create_engine(f'postgresql://{lp}@{postgress_connection}/{postgress_db}')
 API_KEY = api_key
 
-def psql_insert_copy(table, conn, keys, data_iter):
-    dbapi_conn = conn.connection
-    with dbapi_conn.cursor() as cur:
-        s_buf = StringIO()
-        writer = csv.writer(s_buf)
-        writer.writerows(data_iter)
-        s_buf.seek(0)
-
-        columns = ', '.join('"{}"'.format(k) for k in keys)
-        if table.schema:
-            table_name = '{}.{}'.format(table.schema, table.name)
-        else:
-            table_name = table.name
-
-        sql = 'COPY {} ({}) FROM STDIN WITH CSV'.format(
-            table_name, columns)
-        cur.copy_expert(sql=sql, file=s_buf)
         
 def split_type1(x):
     """
