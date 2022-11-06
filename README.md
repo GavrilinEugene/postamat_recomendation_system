@@ -1,6 +1,7 @@
-# Репозиторий по сбору данных, обработке и созданию модели машинного обучения [#10 хакатона ](https://leaders2022.innoagency.ru/task10.html) от команды Geo.xyz
+# Сборб обработка и моделирование в рамках [#10 хакатона ](https://leaders2022.innoagency.ru/task10.html) от команды Geo.xyz
 
-[Репозиторий сервсиса](https://github.com/hashbash/postamat)
+
+Данные - пререквезит для работы [сервсиса](https://github.com/hashbash/postamat)
 
 ## Оглавление:
 1. [Подготовка](#Подготовка)
